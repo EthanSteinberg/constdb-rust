@@ -1,7 +1,8 @@
 [package]
 name = "constdb"
 version = "0.1.0"
-authors = ["ethanid"]
+authors = ["Ethan Steinberg"]
+license = "MIT"
 
 [dependencies]
 memmap = "0.6.2"
