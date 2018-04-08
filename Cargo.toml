@@ -3,6 +3,9 @@ name = "constdb"
 version = "0.1.0"
 authors = ["Ethan Steinberg"]
 license = "MIT"
+repository = "https://github.com/Lalaland/constdb-rust"
+description = "constdb is a simple and fast read-only embedded key value datastore"
+
 
 [dependencies]
 memmap = "0.6.2"
