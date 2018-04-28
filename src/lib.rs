@@ -208,7 +208,7 @@ unsafe impl Sync for Mmap {}
 unsafe impl Send for Mmap {}
 
 pub struct ReaderOptions {
-    random_access: bool
+    pub random_access: bool
 }
 
 impl Default for ReaderOptions {
@@ -313,7 +313,7 @@ mod tests {
             writer.close().unwrap(); 
         }
         {
-            let reader = ::Reader::open(&path_to_file, ::ReaderOptions::default()).unwrap();
+            let reader = ::Reader::open(&path_to_file, ::ReaderOptions {random_access: false}).unwrap();
             assert_eq!(reader.get_int(42), None);
             assert_eq!(reader.get_int(43).unwrap(), &[72u8, 101u8, 108u8, 108u8, 111u8]);
             assert_eq!(reader.get_int(65).unwrap(), &[1u8, 37u8, 121u8]);
