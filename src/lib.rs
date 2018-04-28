@@ -1,6 +1,6 @@
-extern crate memmap;
 extern crate failure;
 extern crate byteorder;
+extern crate libc;
 
 use byteorder::LittleEndian;
 use byteorder::ByteOrder;
@@ -9,13 +9,18 @@ use std::io::Write;
 use std::path::Path;
 use std::collections::HashMap;
 
-use memmap::Mmap;
-use memmap::MmapOptions;
 use std::fs::File;
 use failure::Error;
 
-// table_offset_format = '<q'
-// table_entry_format = '<iqqq'
+use std::ops::Deref;
+use std::convert::AsRef;
+
+use std::fmt;
+use std::io;
+
+use std::os::unix::io::AsRawFd;
+use std::slice;
+use std::ptr;
 
 const INT_KEY_TYPE: i32 = 0;
 const STR_KEY_TYPE: i32 = 1;
@@ -103,6 +108,117 @@ impl Drop for Writer {
     }
 }
 
+pub struct Mmap {
+    ptr: *mut libc::c_void,
+    len: usize,
+}
+
+impl Mmap {
+    fn new(
+        file: &File,
+        random_access: bool,
+    ) -> io::Result<Mmap> {
+
+        let fd = file.as_raw_fd();
+        let len = file.metadata()?.len() as usize;
+
+        unsafe {
+            let ptr = libc::mmap(
+                ptr::null_mut(),
+                len,
+                libc::PROT_READ,
+                libc::MAP_SHARED,
+                fd,
+                0,
+            );
+
+            if random_access {
+                libc::madvise(ptr, len, libc::MADV_RANDOM);
+            }
+
+            if ptr == libc::MAP_FAILED {
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(Mmap {
+                    ptr,
+                    len,
+                })
+            }
+        }
+    }
+
+
+    #[inline]
+    pub fn ptr(&self) -> *const u8 {
+        self.ptr as *const u8
+    }
+
+    #[inline]
+    pub fn mut_ptr(&mut self) -> *mut u8 {
+        self.ptr as *mut u8
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Drop for Mmap {
+    fn drop(&mut self) {
+        unsafe {
+            assert!(
+                libc::munmap(
+                    self.ptr,
+                    self.len
+                ) == 0,
+                "unable to unmap mmap: {}",
+                io::Error::last_os_error()
+            );
+        }
+    }
+}
+
+impl Deref for Mmap {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.ptr as *mut u8, self.len) }
+    }
+}
+
+impl AsRef<[u8]> for Mmap {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
+impl fmt::Debug for Mmap {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Mmap")
+            .field("ptr", &self.ptr)
+            .field("len", &self.len)
+            .finish()
+    }
+}
+
+unsafe impl Sync for Mmap {}
+unsafe impl Send for Mmap {}
+
+pub struct ReaderOptions {
+    random_access: bool
+}
+
+impl Default for ReaderOptions {
+    fn default() -> ReaderOptions {
+        ReaderOptions {
+            random_access: true
+        }
+    }
+}
+
 pub struct Reader {
     map: Mmap,
     int_offsets: HashMap<i64, (usize, usize)>,
@@ -110,9 +226,9 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Reader, Error> {
+    pub fn open<P: AsRef<Path>>(path: P, options: ReaderOptions) -> Result<Reader, Error> {
         let file = File::open(path)?;
-        let map = unsafe { MmapOptions::new().map(&file)? };
+        let map = Mmap::new(&file, options.random_access)?;
         let mut int_offsets: HashMap<i64, (usize, usize)> = HashMap::new();
         let mut str_offsets: HashMap<String, (usize, usize)> = HashMap::new();
 
@@ -197,7 +313,7 @@ mod tests {
             writer.close().unwrap(); 
         }
         {
-            let reader = ::Reader::open(&path_to_file).unwrap();
+            let reader = ::Reader::open(&path_to_file, ::ReaderOptions::default()).unwrap();
             assert_eq!(reader.get_int(42), None);
             assert_eq!(reader.get_int(43).unwrap(), &[72u8, 101u8, 108u8, 108u8, 111u8]);
             assert_eq!(reader.get_int(65).unwrap(), &[1u8, 37u8, 121u8]);
