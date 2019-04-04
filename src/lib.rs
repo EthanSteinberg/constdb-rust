@@ -6,6 +6,7 @@ use byteorder::LittleEndian;
 use byteorder::ByteOrder;
 
 use std::io::Write;
+use std::io::BufWriter;
 use std::path::Path;
 use std::collections::HashMap;
 
@@ -26,7 +27,7 @@ const INT_KEY_TYPE: i32 = 0;
 const STR_KEY_TYPE: i32 = 1;
 
 pub struct Writer {
-    file: File,
+    file: BufWriter<File>,
     int_offsets: Vec<(i64, (i64, i64))>,
     str_offsets: Vec<(String, (i64, i64))>,
     current_offset: i64,
@@ -35,7 +36,7 @@ pub struct Writer {
 
 impl Writer {
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Writer, Error> {
-        let file = File::create(path)?;
+        let file = BufWriter::new(File::create(path)?);
 
         let result = Writer {
             file, 
@@ -303,7 +304,6 @@ mod tests {
         
         {
             let mut writer = ::Writer::create(&path_to_file).unwrap();
-
 
             writer.add_str("Foo bar", &[1u8, 7u8]).unwrap();
             writer.add_int(43, &[72u8, 101u8, 108u8, 108u8, 111u8]).unwrap();
