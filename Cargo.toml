@@ -3,7 +3,7 @@ name = "constdb"
 version = "0.2.2"
 authors = ["Ethan Steinberg"]
 license = "MIT"
-repository = "https://github.com/Lalaland/constdb-rust"
+repository = "https://github.com/EthanSteinberg/constdb-rust"
 description = "constdb is a simple and fast read-only embedded key value datastore"
 
 
